@@ -1,0 +1,776 @@
+---
+title: "Marra Homework 2"
+output:
+  pdf_document: default
+  html_document: default
+date: "2023-02-24"
+---
+
+```{r}
+library(class)
+library(MASS)
+library(kernlab)
+library(mlbench)
+library(reshape2)
+library(ROCR)
+library(ggplot2)
+library(ada)
+library(ipred)
+library(survival)
+library(rchallenge)
+library(PerformanceAnalytics)
+library(knitr)
+library(acepack)
+library(HSAUR2)
+library(corrplot)
+library(e1071)
+library(audio)
+library(mclust)
+library(tuneR)
+library(soundgen)
+library(dslabs)
+library(caTools)
+library(caret)
+```
+
+EXERCISE 1: Detecting and Recognizing Speaker Accent    
+
+The datasets accent-raw-data-1.csv and accent-mfcc-data-1.csv respectively contain audio tracks and transformed audio tracks of a total of 328 readings of English words. Most of the readings are done by US born speakers of English while the remaining ones are done by speakers born outside the US. The transformed version of the data was processed using an adaptation of Fourier like transforms known as MFCC.       
+
+1.1) First consider the dataset accent-raw-data-1.csv    
+```{r}
+getwd()
+xy <- read.csv('~/Downloads/accent-raw-data-1.csv')
+dim(xy)
+
+```
+
+
+1.1.1) Comment on the peculiarities of the dataset from a point of view dimensionality.    
+Answer:    
+The accent-raw-data-1 dataset is made up of 329 rows and 39,681 columns, meaning this set has almost 40,000 variables. It's peculiar how massive this dataset is; particularly that p is so much larger than n. Which in different cases would be a cause for overfitting and be considered a set of very high complexity given its many input values. However, the "explanatory" variables in this case do not represent explanatory variables in the usual sense, here, this is a time series graph so each x variable represents a different portion of time which makes up an entire audio clip.                 
+
+
+1.1.2) Use the ts.plot() function to plot speakers {9, 45, 81, 99, 126, 234}. You must make this into a numeric
+
+```{r}
+getwd()
+xy <- read.csv('~/Downloads/accent-raw-data-1.csv')
+x <- as.matrix(xy[,-1])
+y <- xy[,1]
+
+x_transpose <- t(x)
+
+speakers <- c(9, 45, 81, 99, 126,234)
+
+x_speaker <- x_transpose[, speakers]
+
+ts.plot(x_speaker, type='l', col=rainbow(length(speakers)))
+
+```
+
+
+
+
+1.1.3) Comment comparatively on the features of the plotted soundtracks. For the fun of it, consider using the function play() from the library(audio) to hear the sound of each of the speakers. plotted.  
+Answer:   
+The audios have different patterns and amplitudes. Some speakers' audios are more intense and sharp, others are smoother and not as static. There is also more fluctuation in amplitudes between audios. For instance, the French audio has a large variation in high to low amplitudes. But the British audio looks like a mirrored normal distribution curve. And the English audio looks like it's left-skewed.          
+
+```{r}
+for (i in 1:ncol(x_speaker)) {
+  ts.plot(x_speaker[, i], type='l', col=rainbow(length(speakers)))
+  audio::play(x_speaker[, i], blocking = TRUE, sample.rate=9000, bit=64)
+  Sys.sleep(3.5)
+}
+
+# included the audio:: above bc play() is used in a different package as well
+# so when play() was ran alone, R used the first package listed (not audio)
+# since it was trying to use a function from a diff library, 
+# it wasn't running the certain play() function i needed 
+
+```
+
+```{r}
+y[speakers]
+
+# ES = Spanish
+# FR = French
+# GE = German
+# IT = Italian
+# UK = British
+# US = English 
+```
+
+
+
+1.1.4) Comment on the use of Bayes Gaussian Linear Discriminant Analysis as the learning machine for classifying the speaking accent using this data.     
+Answer:      
+Bayes Gaussian Linear Discriminant Analysis assumes that the data follows a normal distribution with the constant covariance matrices in each class. Since it is a linear classifier, it draws a linear decision boundary between classes. And since I am trying to classify each accent, BGLDA is probably not the best choice since this is data set has high dimensionality and the constant covariance matrix assumption may not be met.    
+
+
+1.1.5a) Comment on the use of Bayes Gaussian Quadratic Discriminant Analysis as the learning machine for classifying the speaking accent.     
+Answer:       
+Similarly, BGQDA assumes that the data follows a normal distribution but allows  different covariance matrices in classes. This may be a better choice for classifying each accent in the data set.
+
+
+1.1.5b) Comment on the use of Naive Bayes Discriminant Analysis as the learning machine for classifying speaking accent using this data.       
+Answer:      
+Similarly, Naive Bayes Discriminant Analysis assumes that the data follows a normal distribution but also assumes the features are independent within each class. Naive Bayes can handle the high dimensionality of the data set as well. So this may be an even better choice for classifying each accent in the data set. 
+
+
+1.1.6) Comment on the use of kNN as learning machines for classifying the speaking accent using this data.    
+Answer:       
+kNN classifies data points based on the maximum class of its k nearest neighbors in the training set. So kNN may be useful for differentiating between accents, but will not handle the high dimensionality of the data set well. Since it will be more difficult for the algorithm to find an appropriate k value with a data set so large. kNN is also sensitive to weighting and scaling, so I would have to standardize the data set before using the algorithm if I wanted to try and find an appropriate k value. And to note, kNN is a lazy algorithm, so it memorizes the training data set instead of learning a discriminative function to further perform classification.
+
+
+1.2) Consider now the dataset accent-mfcc-data-1.csv along with the binary classification task of US Born versus Non-US Born speakers. You are to compare the following methods of classification: (1) 1 Nearest Neighbor (2) 9 Nearest Neighbors (3) Bayes Gaussian Linear Discriminant Analysis (4) Bayes Gaussian Quadratic Discriminant Analysis (5) Naive Bayes Discriminant Analysis.   
+
+```{r}
+getwd()
+xy.mfcc <- read.csv('~/Downloads/accent-mfcc-data-1.csv')
+dim(xy.mfcc)
+str(xy.mfcc)
+
+```
+
+\textbf{Classification performance in training}      
+1. Generate separate training set confusion matrices for each of the five methods.
+```{r}
+set.seed(19671210)
+
+  n = 329                      # number of observations in dataset
+
+  epsilon <- 0.3               # Proportion of observations in the test set
+  nte     <- round(n*epsilon)  # Number of observations in the test set
+  ntr     <- n - nte
+
+  id.tr   <- sample(sample(sample(n)))[1:ntr]   # For a sample of ntr indices from {1,2,..,n}
+  id.te   <- setdiff(1:n, id.tr)
+
+  xy.mfcc.tr <- xy.mfcc[id.tr,]
+
+  xy.mfcc.te <- xy.mfcc[id.te,]
+
+  x_train <- xy.mfcc.tr[, -1]
+  y_train1 <- xy.mfcc.tr[1]
+
+  x_test <- xy.mfcc.te[, -1]
+  y_test <- xy.mfcc.te[1]
+
+  y_train <- y_train1$language
+  length(x_train)
+  length(y_train1)
+  
+
+```
+
+```{r}
+#1NN Training confusion matrix
+   ytr.knn1 <- knn(x_train, x_train, y_train, k=1)
+
+   conf.mat.tr.knn1 <- table(y_train, ytr.knn1)
+   
+   accuracy1 <- sum(diag(conf.mat.tr.knn1))/230
+   accuracy1
+   
+   conf.mat.tr.knn1
+   
+   
+# 1NN Test Confusion Matrix
+  # yte.knn1 <- knn(x_train, x_test, y_train, k=1)
+
+  # conf.mat.te.knn1 <- table(y_test, yte.knn1)
+   
+  
+```
+
+```{r}
+#9NN Training confusion matrix
+   ytr.knn9 <- knn(x_train, x_train, y_train, k=9)
+
+   conf.mat.tr.knn9 <- table(y_train, ytr.knn9)
+   
+   accuracy9 <- sum(diag(conf.mat.tr.knn9))/230
+   accuracy9
+   
+   print(conf.mat.tr.knn9)
+   
+   
+# 9NN Test Confusion Matrix
+  # yte.knn9 <- knn(x_train, x_test, y_train, k=9)
+
+  # conf.mat.te.knn9 <- table(y_test, yte.knn9)
+   
+
+```
+
+```{r}
+lda <- lda(x_train, y_train) 
+lda_pred <- predict(lda, x_train)$class
+lda_conf <- table(y_train, lda_pred)
+
+accuracy.tr.lda <- sum(diag(lda_conf))/230
+
+accuracy.tr.lda
+lda_conf 
+
+```
+
+
+
+```{r}
+qda <- qda(x_train, y_train) 
+qda_pred <- predict(qda, x_train)$class
+qda_conf <- table(y_train, qda_pred)
+
+accuracy.tr.qda <- sum(diag(qda_conf))/230
+
+accuracy.tr.qda
+qda_conf 
+
+```
+
+
+```{r}
+library(e1071)
+
+nb_model <- naiveBayes(as.factor(y_train) ~ ., data = x_train)
+
+y.tr.hat <- predict(nb_model, x_train, type='class')
+
+conf.mat.tr.nb <- table(y_train, y.tr.hat)
+
+accuracy.tr.nb <- sum(diag(conf.mat.tr.nb))/230
+
+accuracy.tr.nb
+
+conf.mat.tr.nb
+
+```
+
+
+2. Plot comparative training set ROC curves for all the five methods.  
+```{r}
+ library(pROC)
+  library(ROCR)
+  library(e1071)
+  
+  us_or_notus <- function(y) {
+  if (y == "US") {
+    return("US")
+  } else {
+    return("notUS")
+  }
+}
+    
+y_train1$yprime <- sapply(y_train1$language, us_or_notus)
+
+ytrain.prime <- y_train1$yprime
+
+#1NN
+  kNN.mod <- class::knn(x_train, x_train, ytrain.prime, k=1, prob=TRUE)
+  prob    <- attr(kNN.mod, 'prob')
+  prob    <- 2*ifelse(kNN.mod == "notUS", 1-prob, prob) - 1
+  
+  ytrain_f <- as.factor(y_train)
+  
+  pred.1NN <- prediction(prob, ytrain.prime)
+  perf.1NN <- performance(pred.1NN, measure='tpr', x.measure='fpr')
+  
+#9NN
+  kNN.mod <- class::knn(x_train, x_train, ytrain.prime, k=9, prob=TRUE)
+  prob    <- attr(kNN.mod, 'prob')
+  prob    <- 2*ifelse(kNN.mod == "notUS", 1-prob, prob) - 1
+  
+  pred.9NN <- prediction(prob, ytrain.prime)
+  perf.9NN <- performance(pred.9NN, measure='tpr', x.measure='fpr')
+  
+#LDA  
+  lda.mod <- MASS::lda(x_train, ytrain.prime)
+  lda.prob <- predict(lda.mod, x_train)$posterior[,2]
+
+  pred.lda <- prediction(lda.prob, ytrain.prime)
+  perf.lda <- performance(pred.lda, measure='tpr', x.measure='fpr') 
+  
+  
+#QDA  
+  qda.mod <- MASS::qda(x_train, ytrain.prime)
+  qda.prob <- predict(qda.mod, x_train)$posterior[,2]
+
+  pred.qda <- prediction(qda.prob, ytrain.prime)
+  perf.qda <- performance(pred.qda, measure='tpr', x.measure='fpr') 
+  
+#NB
+  nb_model <- naiveBayes(x_train, ytrain.prime, type = "raw")
+  y_pred_nb <- predict(nb_model, x_train, type = "raw")
+  y_pred_nb_class2 <- y_pred_nb[, 2]
+  pred_nb <- prediction(y_pred_nb_class2, ytrain.prime)
+  perf.nb <- performance(pred_nb, measure='tpr', x.measure='fpr')
+  
+  
+  plot(perf.1NN, col=2, lwd= 2, lty=2, main=paste('Comparative ROC curves in Training'))
+  plot(perf.9NN, col=3, lwd= 2, lty=3, add=TRUE)
+  plot(perf.lda, col=4, lwd= 2, lty=4, add=TRUE)
+  plot(perf.qda, col=5, lwd= 2, lty=5, add=TRUE)
+  plot(perf.nb, col=6, lwd= 2, lty=6, add=TRUE)
+  
+  abline(a=0,b=1)
+  legend('bottomright', inset=0.05, c('1NN','9NN', 'LDA', 'QDA', 'NB'),  col=2:6, lty=2:5)
+```
+
+```{r}
+# different version, please do not grade
+library(e1071)
+
+x_train_new <- x_train[y_train %in% c("FR", "GE"),]
+y_train_new <- factor(y_train[y_train %in% c("FR", "GE")])
+
+#1NN
+ kNN.mod <- class::knn(x_train_new, x_train_new, y_train_new, k=1, prob=TRUE)
+  prob    <- attr(kNN.mod, 'prob')
+  prob    <- 2*ifelse(kNN.mod == "0", 1-prob, prob) - 1
+  
+  pred.1NN <- prediction(prob, y_train_new)
+  perf.1NN <- performance(pred.1NN, measure='tpr', x.measure='fpr')
+  
+#9NN
+kNN.mod <- class::knn(x_train_new, x_train_new, y_train_new, k=9, prob=TRUE)
+  prob    <- attr(kNN.mod, 'prob')
+  prob    <- 2*ifelse(kNN.mod == "0", 1-prob, prob) - 1
+  
+  pred.9NN <- prediction(prob, y_train_new)
+  perf.9NN <- performance(pred.9NN, measure='tpr', x.measure='fpr')
+
+#LDA  
+lda.mod <- MASS::lda(x_train_new, y_train_new)
+lda.prob <- predict(lda.mod, x_train_new)$posterior[,2]
+
+pred.lda <- prediction(lda.prob, y_train_new)
+perf.lda <- performance(pred.lda, measure='tpr', x.measure='fpr')  
+
+#QDA
+qda.mod <- MASS::qda(x_train_new, y_train_new)
+y_pred_qda <- predict(qda.mod, x_train_new)
+y_pred_qda_class2 <- y_pred_qda$posterior[,2]
+pred_qda <- prediction(y_pred_qda_class2, y_train_new)
+perf_qda <- performance(pred_qda, measure='tpr', x.measure='fpr')
+
+#NB
+nb_model <- naiveBayes(x_train_new, y_train_new, type = "raw")
+y_pred_nb <- predict(nb_model, x_train_new, type = "raw")
+y_pred_nb_class2 <- y_pred_nb[, 2]
+pred_nb <- prediction(y_pred_nb_class2, y_train_new)
+perf_nb <- performance(pred_nb, measure='tpr', x.measure='fpr')
+  
+plot(perf.1NN, col=2, lwd= 2, lty=2, main=paste('Comparative ROC curves in Training'))
+plot(perf.9NN, col=3, lwd= 2, lty=3, add=TRUE)
+plot(perf.lda, col=4, lwd= 2, lty=4, add=TRUE)
+plot(perf_qda, col=5, lwd= 2, lty=5, add=TRUE)
+plot(perf_nb, col=6, lwd= 2, lty=6, add=TRUE)
+abline(a=0,b=1)
+legend('bottomright', inset=0.05, c('1NN','9NN','LDA','QDA','NB'),  col=2:6, lty=2:6)
+
+```
+
+
+
+
+3. Comment intelligently on the machine that appears to be the best for this task.   
+Answer:      
+According to the comparative ROC curves (for US vs. not US), it appears that 1NN is the best functioning machine. However, 1NN cannot be trusted here since it is a very simple machine that basically memorizes the training set. Thus, the model will appear to be the best/ideal 90 degree fitted curve since it is overfitting the data or simply memorizing information. In other words, it would not be able to perform well on future unseen data/predictions.     
+That being said, looking at the ROC curves for US vs. non US, 9NN appears to be the best machine for the task since it definitely performs better than LDA and NB -- we can tell since the 9NN curve is higher and closer to the ideal 90 degrees -- and since it is a smoother curve. QDA also appears to be a great machine for this task since it closely follows the 9NN curve and has an accuracy of 91.30%. But its line is more jagged than the 9NN curve, which may be an indication that its performance varies significantly across different subsets of data. Therefore, it may not generalize well to new or unseen data, similarly as I described for 1NN. 
+
+
+\textbf{Extrinsic predictive comparisons}    
+Use $S = 1000$ as the number of random splits of the whole data into training and test, with $\tau = \frac{1}{4}$ as the proportion of $\mathcal{D}_n$ allocated to the test set. Be sure to use stratified stochastic hold out for your random splits of $\mathcal{D}_n$. For each split, compute the test error for each of the five learning machines.   
+
+1.2.1) Generate the comparative boxplots of the test errors.  
+```{r}
+library(caret)
+
+S <- 1000
+tau <- 0.25
+
+errors <- data.frame(error1 = numeric(S),
+                      error2 = numeric(S),
+                      error3 = numeric(S),
+                      error4 = numeric(S),
+                      error5 = numeric(S))
+
+for(s in 1:S) {
+  n <- nrow(xy.mfcc)
+  nte <- round(n * tau)
+  ntr <- n - nte
+  id.te <- sample(seq_len(n), size = nte)
+  id.tr <- setdiff(seq_len(n), id.te)
+  
+  train.data <- xy.mfcc[id.tr, ]
+  test.data <- xy.mfcc[id.te, ]
+  
+  xtr <- train.data[, -1]
+  ytr <- train.data[, 1]
+  
+  xte <- test.data[, -1]
+  yte <- test.data[, 1]
+  
+  error1 <- 1 - sum(knn(train = xtr, test = xte, cl = ytr, k =1) == yte) / length(ytr)
+  error2 <- 1 - sum(knn(train = xtr, test = xte, cl = ytr, k =9) == yte) / length(ytr)
+  model3 <- lda(xtr,ytr)
+  pred3 <- predict(model3, newdata = xte)
+  error3 <- 1 - sum(pred3$class == yte)/ length(yte)
+  model4 <- qda(xtr,ytr)
+  pred4 <- predict(model4, newdata = xte)
+  error4 <- 1 - sum(pred4$class == yte)/ length(yte)  
+  model5 <- naiveBayes(xtr, ytr)
+  pred5 <- predict(model5, newdata = xte)
+  conf_mat <- table(pred5, yte)
+  error5 <- 1 - sum(diag(conf_mat)) / sum(conf_mat)
+  
+  errors[s,] <- c(error1, error2, error3, error4, error5)
+}
+
+# check the results
+head(errors)
+
+names(errors) <- c("1NN", "9NN", "LDA", "QDA", "NB")
+boxplot(as.matrix(errors), ylab = "Overall Test Error", 
+        col=c("red", "orange", "yellow", "green", "blue"))
+
+```
+
+
+
+
+1.2.2) Create a table with 4 rows, with each row representing one of the following statistics on the test errors (minimum, mean, median, maximum).  
+```{r}
+table_stats <- data.frame(
+  min = apply(errors, 2, min),
+  mean = apply(errors, 2, mean),
+  median = apply(errors, 2, median),
+  max = apply(errors, 2, max)
+)
+
+print(as.data.frame(t(table_stats)))
+
+```
+
+
+1.2.3) Perform an analysis of variance on the test errors and reveal the plot of the pairwise confidence intervals.   
+```{r}
+library(magrittr)
+library(tidyr)
+
+model_errors_long <- errors %>% gather(model, test_error)
+
+model_anova <- aov(test_error ~ model, data = model_errors_long)
+
+summary(model_anova)
+```
+
+```{r}
+library(tidyr)
+
+errors_long <- gather(errors, learning_machine, test_error)
+
+model <- aov(test_error ~ learning_machine, data = errors_long)
+
+anova_table <- summary(model)
+
+conf_int <- TukeyHSD(model)
+
+plot(conf_int)
+
+
+```
+
+
+1.2.4) Comment on the predictive performances of the five learning machines, and declare your winner.     
+Answer:       
+Looking at the ANOVA table, since the model's p-value is approximately zero, we have enough evidence to reject the null hypothesis. Indicating that there is a significant difference between at least one of the machines' means. Looking at the pairwise confidence intervals, we can also see that none of the intervals contain zero. Thus, the means between each pair of machines is significantly different. (Disclaimer: I'm not sure if my pairwise graph is correct since the intervals are incredibly small, but the result makes sense that the means for each are significantly different.)    
+
+
+
+1.3) Reconsider the confusion matrix of the best of the five learning machines, and comment on the similarity between speaking accents.    
+Looking at the confusion matrix for 9NN, we can see that there were many false positive under the US column. Which tells us that 9NN method predicted more accents to be English, when the true y was another accent. According to this confusion matrix, there were 2 instances English was incorrectly classified as Spanish, 3 as French, 6 as German, 5 as Italian, and 4 as British. This machine was better at classifying the remaining accents, since there were only 2 total incorrect Spanish classifications, 2 incorrect French classifications, 5 German, 6 Italian, and 7 British. Which do not compare to English's 20 misclassifications. More on the behavior of this machine, it appears that 9NN usually misclassified Spanish as English, German as English, Italian as British, British as English, and English as German.               
+
+       ytr.knn9
+y_train ES FR GE IT UK US
+     ES 17  1  0  0  0  2
+     FR  0 21  0  1  0  3
+     GE  0  0 12  2  0  6
+     IT  0  1  1 16  1  5
+     UK  0  0  1  3 23  4
+     US  2  0  3  0  6 99
+
+
+
+
+\newpage
+
+
+
+
+
+
+
+
+EXERCISE 2: Practical Machine Learning of Microarrays
+Consider the prostate cancer dataset containing the DNA MicroArray Gene Expression of both cancer and non cancer subjects.   
+
+```{r}
+getwd()
+prostate <- read.csv('~/Downloads/prostate-cancer-1.csv') 
+# DNA MicroArray Gene Expression
+dim(prostate)
+
+
+```
+
+You are supposed to provide a thorough comparison of four learning machines on this dataset, namely 1NN, 9NN, LDA and QDA, and Naive Bayes. 
+
+2.1) Plot the distribution of the response for this dataset and comment.  
+```{r}
+ggplot(prostate, aes(x = Y, fill = factor(Y))) + 
+  geom_bar() + 
+  labs(x = "Y", y = "Count", 
+       title = "Distribution of Response Variable in Prostate Cancer Dataset") +
+  scale_fill_manual(name = "Legend", values = c("lightgreen", "pink2"), 
+                    labels = c("No Prostate Cancer", "Prostate Cancer")) + 
+  theme_minimal()
+```
+
+
+
+2.2) Comment on the shape of this dataset in terms of the sample size and the dimensionality of the input space    
+Answer:        
+Since this data set has a relatively small sample size of n=79 but a higher dimensionality of p=501, this may cause problems of overfitting (n<<<p). Therefore, we can use feature selection or dimensionality reduction techniques (like principal compnent analysis (PCA)) to reduce the number of input variables.          
+
+
+2.3) Comment succinctly from the statistical perspective on the type of data in the input space      
+Answer:     
+Assuming the input variables in this data set are gene expressions which are continuous numeric variables, we can use statistical techniques such as regression, classification, or clustering to analyze this data.        
+
+
+
+Now, consider using the power of learning machines to discover the patterns underlying the relationship between the response and the predictor variables.     
+
+2.1) For each of the five learning machines, comment succinctly on its ability to perform the classification task.     
+Answer:       
+The 1NN algorithm will most likely not perform well on this data set due to the high dimensionality versus smaller sample size. It may suffer from overfitting and may not be able to capture latent patterns.       
+The 9NN algorithm may perform better than 1NN since there is a larger neighborhood for the machine to work with -- which will help reduce effects of noise and overfitting. But it may struggle with the same issue of high dimensionality versus low sample size.   
+The LDA algorithm is designed to handle higher dimensional data sets with continuous variables. But the data set having a smaller sample size may limit the algorithm's performance. Same goes for the QDA and NB algorithms.          
+
+
+2.2) For each of the machines incapable of performing the task in its original form, suggest your favorable approach to circumventing the difficulty. Hint: You could think of selection, projection or regularization.      
+Answer:     
+A possible approach to circumventing the difficulty would be, as mentioned previously, a dimensionality reduction technique to reduce the number of p or input variables and overall improve the performance of each algorithm since they all struggle with the issue of working with data sets with small sample sizes but high dimesionality. We could use principal component analysis (PCA) to define some $q \times q$ matrix $W=(w_1, w_2, ...,w_q)^\top$ such that the PC score $Z_j=w_j^\top X$, the PC scores have the non-increasing property, and the PC scores are mutually uncorrelated. Then to deal with the scaling effect, we can standardize the variables by centering and reducing them to unit variance. The goal of dimensionality reduction is to project the high dimensional data onto a lower dimsional space in order to reduce variability.      
+If we were asked to implement this approach, we could do so in the following steps:    
+- Use library(princomp) and library(prcomp)   
+- Generate pairwise scatterplot 
+- Look at the correlation matrix
+- Estimate the principal scores
+- Plot the first two PC scores
+- Estimate PVE
+- Decide how many PC are needed
+- Continue our analysis with those PC scores
+Some notes to keep track of when using PCA, the data must be Gaussian and not multimodal, and $q$ and $n$ cannot be extremely large.    
+```{r}
+
+y <- prostate[,1]
+X <- prostate[,2:501] 
+
+pca <- prcomp(X, center = TRUE, scale. = TRUE)
+
+plot(pca)
+
+# pca$rotation
+
+pca_data <- data.frame(pca$x[,1:2], y)
+
+ggplot(pca_data, aes(x = PC1, y = PC2, color = factor(y))) + 
+  geom_point() +
+  labs(x = "PC1", y = "PC2")
+
+```
+
+2.3) Upon finalizing your solution to any difficulty with any of the learning machines, reconsider all the learning machines in their ready version, and plot the comparative training set ROC curves on the same plot. Please be sure to provide a clear legend!  
+
+
+
+```{r}
+set.seed(19671210)
+
+  n = 79                      # number of observations in dataset
+
+  epsilon <- 0.3               # Proportion of observations in the test set
+  nte     <- round(n*epsilon)  # Number of observations in the test set
+  ntr     <- n - nte
+
+  id.tr   <- sample(sample(sample(n)))[1:ntr] # For a sample of ntr indices from {1,2,..,n}
+  id.te   <- setdiff(1:n, id.tr)
+
+  prostate.tr <- prostate[id.tr,]
+
+  prostate.te <- prostate[id.te,]
+
+  x_train <- prostate.tr[, -1]
+  y_train1 <- prostate.tr[1]
+
+  x_test <- prostate.te[, -1]
+  y_test <- prostate.te[1]
+
+  y_train <- y_train1$Y
+  length(x_train)
+  length(y_train1)
+  
+library(e1071)
+
+x_train_new <- x_train[y_train %in% c("0", "1"),]
+y_train_new <- factor(y_train[y_train %in% c("0", "1")])
+
+#1NN
+ kNN.mod <- class::knn(x_train_new, x_train_new, y_train_new, k=1, prob=TRUE)
+  prob    <- attr(kNN.mod, 'prob')
+  prob    <- 2*ifelse(kNN.mod == "0", 1-prob, prob) - 1
+  
+  pred.1NN <- prediction(prob, y_train_new)
+  perf.1NN <- performance(pred.1NN, measure='tpr', x.measure='fpr')
+  
+#9NN
+kNN.mod <- class::knn(x_train_new, x_train_new, y_train_new, k=9, prob=TRUE)
+  prob    <- attr(kNN.mod, 'prob')
+  prob    <- 2*ifelse(kNN.mod == "0", 1-prob, prob) - 1
+  
+  pred.9NN <- prediction(prob, y_train_new)
+  perf.9NN <- performance(pred.9NN, measure='tpr', x.measure='fpr')
+
+#LDA  
+lda.mod <- MASS::lda(x_train_new, y_train_new)
+lda.prob <- predict(lda.mod, x_train_new)$posterior[,2]
+
+pred.lda <- prediction(lda.prob, y_train_new)
+perf.lda <- performance(pred.lda, measure='tpr', x.measure='fpr')  
+
+#QDA
+#qda.mod <- MASS::qda(x_train_new, y_train_new)
+#y_pred_qda <- predict(qda.mod, x_train_new)
+#y_pred_qda_class2 <- y_pred_qda$posterior[,2]
+#pred_qda <- prediction(y_pred_qda_class2, y_train_new)
+#perf_qda <- performance(pred_qda, measure='tpr', x.measure='fpr')
+# Error in qda.default(x, grouping, ...) : some group is too small for 'qda'
+
+#NB
+nb_model <- naiveBayes(x_train_new, y_train_new, type = "raw")
+y_pred_nb <- predict(nb_model, x_train_new, type = "raw")
+y_pred_nb_class2 <- y_pred_nb[, 2]
+pred_nb <- prediction(y_pred_nb_class2, y_train_new)
+perf_nb <- performance(pred_nb, measure='tpr', x.measure='fpr')
+  
+plot(perf.1NN, col=2, lwd= 2, lty=2, main=paste('Comparative ROC curves in Training'))
+plot(perf.9NN, col=3, lwd= 2, lty=3, add=TRUE)
+plot(perf.lda, col=4, lwd= 2, lty=4, add=TRUE)
+# plot(perf_qda, col=5, lwd= 2, lty=5, add=TRUE)
+plot(perf_nb, col=6, lwd= 2, lty=6, add=TRUE)
+abline(a=0,b=1)
+legend('bottomright', inset=0.05, c('1NN','9NN','LDA','QDA','NB'),  col=2:6, lty=2:6)
+
+```
+
+```{r
+# When trying to apply the PCA method, i kept running into errors. so here is the code i tried using. 
+Please provide any feedback as to where i can fix the error. 
+
+library(caret)
+set.seed(19671210)
+
+n <- 79                      
+epsilon <- 0.3               
+nte <- round(n*epsilon)    
+ntr <- n - nte
+
+id.tr <- sample(sample(sample(n)))[1:ntr]   
+id.te <- setdiff(1:n, id.tr)
+
+prostate.tr <- prostate[id.tr,]
+prostate.te <- prostate[id.te,]
+
+x_train <- prostate.tr[, -1]
+y_train1 <- prostate.tr[1]
+x_test <- prostate.te[, -1]
+y_test <- prostate.te[1]
+
+y_train <- y_train1$Y
+length(x_train)
+length(y_train1)
+
+x_train_new <- x_train[y_train %in% c("0", "1"),]
+y_train_new <- factor(y_train[y_train %in% c("0", "1")])
+
+# removing near-zero variance variables
+nzv <- nearZeroVar(x_train_new)
+x_train_new <- x_train_new[, -nzv]
+
+x_train_scaled <- scale(x_train_new)
+
+library(FactoMineR)
+pca <- PCA(x_train_scaled)
+
+cum_var <- cumsum(pca$eig[,"percentage of variance"])
+n_comp <- length(cum_var[cum_var <= 0.9])
+pc <- pca$ind$coord[,1:n_comp]
+
+#1NN
+kNN.mod <- class::knn(pc, pc, y_train_new, k=1, prob=TRUE)
+prob    <- attr(kNN.mod, 'prob')
+prob    <- 2*ifelse(kNN.mod == "0", 1-prob, prob) - 1
+
+pred.1NN <- prediction(prob, y_train_new)
+perf.1NN <- performance(pred.1NN, measure='tpr', x.measure='fpr')
+
+#9NN
+kNN.mod <- class::knn(pc, pc, y_train_new, k=9, prob=TRUE)
+prob    <- attr(kNN.mod, 'prob')
+prob    <- 2*ifelse(kNN.mod == "0", 1-prob, prob) - 1
+
+pred.9NN <- prediction(prob, y_train_new)
+perf.9NN <- performance(pred.9NN, measure='tpr', x.measure='fpr')
+
+#LDA  
+lda.mod <- MASS::lda(pc, y_train_new)
+lda.prob <- predict(lda.mod, pc)$posterior[,2]
+
+pred.lda <- prediction(lda.prob, y_train_new)
+perf.lda <- performance(pred.lda, measure='tpr', x.measure='fpr')
+
+
+# QDA
+qda.mod <- MASS::qda(x_train_new, y_train_new)
+y_pred_qda <- predict(qda.mod, x_train_new)
+y_pred_qda_class2 <- y_pred_qda$posterior[,2]
+pred_qda <- prediction(y_pred_qda_class2, y_train_new)
+perf_qda <- performance(pred_qda, measure='tpr', x.measure='fpr')
+
+# NB
+nb_model <- naiveBayes(x_train_new, y_train_new, type = "raw")
+y_pred_nb <- predict(nb_model, x_train_new, type = "raw")
+y_pred_nb_class2 <- y_pred_nb[, 2]
+pred_nb <- prediction(y_pred_nb_class2, y_train_new)
+perf_nb <- performance(pred_nb, measure='tpr', x.measure='fpr')
+
+
+plot(perf.1NN, col=2, lwd= 2, lty=2, main=paste('Comparative ROC curves in Training'))
+plot(perf.9NN, col=3, lwd= 2, lty=3, add=TRUE)
+plot(perf.lda, col=4, lwd= 2, lty=4, add=TRUE)
+plot(perf_qda, col=5, lwd= 2, lty=5, add=TRUE)
+plot(perf_nb, col=6, lwd= 2, lty=6, add=TRUE)
+abline(a=0,b=1)
+legend('bottomright', inset=0.05, c('1NN','9NN','LDA','QDA','NB'),  col=2:6, lty=2:6)
+```
+
+2.4. Comment on the performances of the learning machines.      
+Answer:     
+According to the ROC curve (that does not contain QDA since I received an expected error that the sample size grouping was too small for the algorithm) (this plot goes strictly off the training set provided since I was unable to get the PCA application to run properly), it appears that LDA performed the best in this task. Technically, it appears that 1NN performed the best, but that is due to reasons mentioned in the Exercise 1 -- in summary that 1NN is overfitting the data and has an accuracy of 100%/AUC=1. The second best performing machine would be NB and the algorithm that was unable to handle the data very well was 9NN. Which were our expected results that I ellaborated on in question 1. If I were able to apply a feature selection or dimensionality reduction method onto this set, we would still most likely see that the LDA algorithm performed the best on this set. Given that it is classifying the binary reponse variable of having prostate cancer versus not having prostate cancer. And since the number of input variables would be more well-suited to this classification technique.      
+
+
+
+

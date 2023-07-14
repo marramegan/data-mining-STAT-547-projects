@@ -1,0 +1,299 @@
+---
+title: "Marra Homework 3 (Bonus)"
+output:
+  pdf_document: default
+  html_document: default
+date: "2023-04-10"
+---
+
+
+# EXERCISE 1: Clustering a collection of faces 
+
+- Consider the first 5 people in the ORL faces data set + copies of their faces    
+- kmeans clustering
+- hierarchical clustering w various distances
+- kmedoids
+
+```{r}
+getwd()
+orl <- read.csv("~/Downloads/orl-faces2.csv")
+dim(orl)
+
+library(cluster)
+# pam = partitioning around medoids (replaces means in kmeans + replaces l2 distance)
+
+```
+
+## NOTE:     
+- All of this information for Exercise 1 is found under Week 4a PowerPoint notes !    
+
+### 1 - Perform hierarchical clustering under Euclidean distance and the Ward.D2 linkage, using the R function hclust, and plot the dendrogram along with 5 red cluster boxes. 
+$$\text{Euclidean distance: } l_2 \text{ distance: } d(\mathbf{x}_i, \mathbf{x}_j)= \sqrt{\sum_{l=1}^q (x_{il} -x_{jl})^2}=||\mathbf{x}_i - \mathbf{x}_j ||_2$$
+
+```{r}
+library(MASS)
+# library(DMwR)
+library(kernlab)
+library(mlbench)
+library(cluster)
+library(mvtnorm)
+library(class)
+library(car)
+library(ctv)
+
+distance <- dist(orl, method="euclidean")
+hclust.orl <- hclust(distance, method='ward.D2')
+cut.k <- cutree(hclust.orl, k=5)
+plot(hclust.orl, ylab="Distance")
+rect.hclust(hclust.orl, k=5, border="red")
+
+```
+
+### 2 - Perform hierarchical clustering under Canberra distance and the Ward.D2 linkage, using the R function hclust, and plot the dendrogram along with 5 red cluster boxes. 
+$$\text{Canberra distance: } d(\mathbf{x}_i, \mathbf{x}_j)= \sum_{l=1}^q \frac{|x_{il} -x_{jl}|}{|x_{il}+ x_{jl}|}$$
+
+```{r}
+distance <- dist(orl, method="canberra")
+hclust.orl <- hclust(distance, method='ward.D2')
+cut.k <- cutree(hclust.orl, k=5)
+plot(hclust.orl, ylab="Distance")
+rect.hclust(hclust.orl, k=5, border="red")
+
+```
+
+
+### 3 - Comment on the obvious and striking difference between the two results and explain how the distances might be responsible.     
+Answer:     
+Using the Euclidean distance gave us distance on a scale between 0 to approximately 40. While under the Canberra distance, distance is on a scale of 0 to about 1000. The 5 boxes under the Euclidean distance are also more evenly spaced out. While under the Canberra distance, the fourth box is extremely skinny compared to the rest. Given these result, it looks like Euclidean distance is better suited for clustering this orl data into 5 groups.    
+
+### 4 - Consider once again the clustering task with the Canberra distance, but this time use the single (minimum) linkage. Explain why the result looks the way it does. 
+$$\text{Canberra distance: } d(\mathbf{x}_i, \mathbf{x}_j)= \sum_{l=1}^q \frac{|x_{il} -x_{jl}|}{|x_{il}+ x_{jl}|}$$
+```{r}
+distance <- dist(orl, method="canberra")
+hclust.orl <- hclust(distance, method='single')
+cut.k <- cutree(hclust.orl, k=5)
+plot(hclust.orl, ylab="Distance")
+rect.hclust(hclust.orl, k=5, border="red")
+
+```
+
+
+Answer:    
+Single linkage (aka the nearest neighbor linkage) struggles from the chaining effect. This means that we may have a single element close to a neighboring cluster while the majority are far from it.     
+
+
+### 5 - Compare and contrast the clustering obtained using kmeans with k=5 and kmedoids via the function pam using k=5 and the Manhattan distance. 
+$$\text{Manhattan distance: } \text{ city block or } l_2 \text{ distance: } d(\mathbf{x}_i, \mathbf{x}_j)= \sum_{l=1}^q |x_{il} -x_{jl}|=||\mathbf{x}_{il}- \mathbf{x}_{jl}||_1$$
+```{r, warning=FALSE}
+library(factoextra)
+
+set.seed(19671210)
+
+kmeans.res <- kmeans(orl, centers = 5)
+
+fviz_cluster(kmeans.res, data = orl, geom = "point",
+             ellipse.type = "norm", palette = "jco",
+             ggtheme = theme_minimal(), main = "K-means Clustering")
+
+set.seed(19671210)
+kmeans_result <- kmeans(scale(orl), centers=5, nstart=25)
+
+
+
+
+
+set.seed(19671210)
+kmed_result <- pam(scale(orl), k=5, diss=TRUE, metric="manhattan")
+
+par(mfrow=c(1,2))
+plot(kmeans_result$cluster, col=kmeans_result$cluster, pch=20,
+     main="K-means Clustering", xlab="Principal Component 1", ylab="Principal Component 2")
+points(kmeans_result$centers[,1], kmeans_result$centers[,2], col=1:5, pch=4, cex=3)
+plot(kmed_result$clustering, col=kmed_result$clustering, pch=20,
+     main="K-medoids Clustering", xlab="Principal Component 1", ylab="Principal Component 2")
+# points(kmed_result$medoids[,1], kmed_result$medoids[,2], col=1:5, pch=4, cex=3)
+
+```
+
+
+
+Answer:    
+Each set of points in PC2 under kmeans produced more spread out and sparse lines. While the PC2 lines in kmedoids produced more tightly compacted lines. This tells us that the kmedoids clustering algorithm produced more distinct and separate clusters. This is because kmedoids selects a single observation from $\mathit{D}$ as cluster representations (the medoids) and then replaces the $l_2$ distance with any distance deemed appropriate for the orl data.    
+
+
+
+\newpage
+
+# EXERCISE 2: Classification Trees with various complexities 
+
+```{r}
+data(musk)
+dim(musk)
+help(musk)
+
+library(rpart)
+library(rpart.plot)
+
+tree_complexity <- function(tree){return(sum(tree$frame$var == "<leaf>"))}
+
+```
+
+help(musk) tells us:
+- Variables V1-162 = "distance features" along rays. The distances are measured in hundredths of Angstroms. The distances may be pos or neg since they are relative to some origin in each ray. The origin was defined as a "consensus musk" surface that is no longer used. Any experiments with the data should treat these feature values as lying on an arbitrary continuous scale. In particular, the algorithm should not make any use of the zero point or the sign of each feature.
+- Variable V163 = the distance of the oxygen atom in the molecule to a designated point in 3-space. This is also called the OXY_DIS
+- V164 =  the X-displacement from the designated point.
+- V165 = the Y-displacement from the designated point.
+- V166 = the Z-displacement from the designated point.
+- Class: 0 for non-musk, and 1 for musk
+
+### 1 - Fit a classification tree to the musk data using rpart and plot that tree using prp. 
+```{r}
+musk.tree <- rpart(Class ~ ., data = musk)
+
+prp(musk.tree)
+
+```
+
+### 2 - Consider 6 different values of $cp$: 0.003, 0.006, 0.009, 0.03, 0.06, 0.09. Fit a separate tree for each of $cp$ and plot the trees using prp in $3 \times 2$ quadrant. 
+code:   
+----   
+library(gridExtra)
+
+cp.values <- c(0.003, 0.006, 0.009, 0.03, 0.06, 0.09)
+
+tree.list <- list()
+
+for (i in 1:length(cp.values)) {
+  cp <- cp.values[i]
+  tree.list[[i]] <- rpart(Class ~ ., data = musk, cp = cp)
+}
+
+grid.arrange(
+  prp(tree.list[[1]], main = paste0("cp = ", cp.values[1])),
+  prp(tree.list[[2]], main = paste0("cp = ", cp.values[2])),
+  prp(tree.list[[3]], main = paste0("cp = ", cp.values[3])),
+  prp(tree.list[[4]], main = paste0("cp = ", cp.values[4])),
+  prp(tree.list[[5]], main = paste0("cp = ", cp.values[5])),
+  prp(tree.list[[6]], main = paste0("cp = ", cp.values[6])),
+  ncol = 3
+)
+----  
+
+*** The trees print, however, I get the error message below which will get in the way of me knitting. So the images of the trees will be provided in the same MyCourses tab, but will unfortunately not be in this PDF. The error message:     
+Error in gList(list(obj = list(frame = list(var = c("V92", "V51", "V127", :
+only 'grobs' allowed in "gList"
+
+
+### 3 - For each tree building compute the complexity using the function provided, and print the vector of those complexities values. Double check thay it matches the plots. 
+
+```{r}
+cp.values <- c(0.003, 0.006, 0.009, 0.03, 0.06, 0.09)
+
+tree_complexity <- function(tree) {
+  return(sum(tree$frame$var == "<leaf>"))
+}
+
+complexities <- numeric(length(cp.values))
+
+for (i in 1:length(cp.values)) {
+  cp <- cp.values[i]
+  tree <- rpart(Class ~ ., data = musk, cp = cp)
+  complexities[i] <- tree_complexity(tree)
+}
+
+print(complexities)
+
+```
+
+
+The complexities printed do match the number of leaves/terminal nodes from the previous question. $\checkmark$
+
+### 4 - Use a stratified stochastic hold out with 2/3 training and 1/3 test to compute 45 instances of the test errors for each tree. 
+code:   
+```{r}
+library(caret)
+cp.values <- c(0.003, 0.006, 0.009, 0.03, 0.06, 0.09)
+
+tree_complexity <- function(tree) {
+  return(sum(tree$frame$var == "<leaf>"))
+}
+
+num_instances <- 45
+
+set.seed(19671210)
+
+test_errors <- matrix(nrow = num_instances, ncol = length(cp.values))
+
+
+for (i in 1:length(cp.values)) {
+  cp <- cp.values[i]
+  tree <- rpart(Class ~ ., data = musk, cp = cp)
+  for (j in 1:num_instances) {
+    train_index <- createDataPartition(musk$Class, times = 1, p = 2/3, list = FALSE)
+    train <- musk[train_index, ]
+    test <- musk[-train_index, ]
+    
+    tree_fit <- rpart(Class ~ ., data = train, cp = cp)
+    
+    test_pred <- predict(tree_fit, newdata = test, type = "class")
+    
+    test_error <- mean(test_pred != test$Class)
+    
+    test_errors[j, i] <- test_error
+  }
+}
+
+print(test_errors)
+```
+
+
+### 5 - Create a table with 5 rows, the first row being the complexity vector for the 6 trees, and the remaining rows containing minimum, median, mean, and maximum respectively. 
+code:   
+```{r}
+cp_values <- c(0.003, 0.006, 0.009, 0.03, 0.06, 0.09)
+trees <- vector("list", length = length(cp_values))
+for (i in seq_along(cp_values)) {
+  trees[[i]] <- rpart(Class ~ ., data = train, cp = cp_values[i])
+}
+
+complexities <- function(trees) {
+  sapply(trees, function(tree) sum(as.integer(tree$frame$var == "<leaf>")))
+}
+tree_complexities <- complexities(trees)
+
+set.seed(19671210)
+test_errors <- matrix(0, nrow = 45, ncol = length(cp_values))
+for (i in 1:45) {
+  index <- sample(rep(1:3, each = nrow(train) / 3))
+  for (j in seq_along(cp_values)) {
+    tree <- rpart(Class ~ ., data = train[index == 1 | index == 2,], cp = cp_values[j])
+    y_pred <- predict(tree, newdata = train[index == 3,], type = "class")
+    test_errors[i, j] <- mean(y_pred != train[index == 3, "Class"])
+  }
+}
+
+
+table_data <- rbind(tree_complexities, apply(test_errors, 2, function(x) c(min(x), median(x), mean(x), max(x))))
+rownames(table_data) <- c("Complexities", "Min", "Median", "Mean", "Max")
+colnames(table_data) <- cp_values
+print(table_data)
+```
+
+
+### 6 - Plot the corresponding boxplot of the test errors using ggplot2.
+```{r}
+library(ggplot2)
+
+test_errors_df <- data.frame(cp = rep(cp_values, each = nrow(test_errors)), 
+                             test_errors = as.vector(test_errors))
+
+ggplot(test_errors_df, aes(x = factor(cp), y = test_errors)) + 
+  geom_boxplot() +
+  scale_x_discrete(labels = cp_values) +
+  labs(x = "cp value", y = "Test error") +
+  ggtitle("Boxplot of Test Errors by cp value")
+```
+
+
+
+

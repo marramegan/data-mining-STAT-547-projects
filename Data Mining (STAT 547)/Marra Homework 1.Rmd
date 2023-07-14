@@ -1,0 +1,726 @@
+---
+title: "Marra Homework 1"
+output:
+  pdf_document: default
+  html_document: default
+  word_document: default
+date: "2023-02-08"
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+EXERCISE 1: Nearest Neighbor as a Kernel Method        
+Consider a binary response $Y \in \{ -1, 1 \}$       
+Let the kNN learning machine be the method under consideration.       
+Recognizing that the $w_i(\textbf{x})$ is the inverse of the distance (dissimilarity) between $\textbf{x}$ and $\textbf{x}_i$, we adopt the reformulation of the weight $w_i(\textbf{x})$ as a measure of the similarity between $\textbf{x}$ and $\textbf{x}_i$, and using a bivariate function $\mathcal{K}: \mathcal{X} \times \mathcal{X} \rightarrow \mathbb{R}_+$       
+The negative exponential weighting scheme is: $$\mathcal{K}(\mathbf{x}, \mathbf{x}_i) = w_i(\mathbf{x})=\frac{e^{\gamma d (\mathbf{x}, \mathbf{x}_i)}}{\sum_{l}e^{\gamma d (\mathbf{x},\mathbf{x}_i)}}$$ where $\gamma$ is a real positive number representing the bandwidth.     
+Let $\alpha_i = 1 (\textbf{x}_i \in \mathcal{V}_k(\textbf{x}))$ be the neighborhood indicator. $\mathcal{V}_k \subseteq \mathcal{D}_n \subset \mathcal{X}$     
+
+1. Explain clearly why and how $\hat{f}_{kNN}$ does indeed compute the predicted label of $\textbf{x}$ $$\hat{f}_{kNN}(\textbf{x})=\text{sign} (\sum_{i=1}^n y_i \alpha_i \mathcal{K} (\textbf{x}, \textbf{x}_i))$$      
+Answer:        
+$\hat{f}_{kNN}$ represents a random function/machine from the kNN space. The sign function (signiem/signum) tells us that if $\sum_{i=1}^n y_i \alpha_i \mathcal{K} (\textbf{x}, \textbf{x}_i) < 0$, then the predicted label of $\textbf{x}$ is $-1.$ And if $\sum_{i=1}^n y_i \alpha_i \mathcal{K} (\textbf{x}, \textbf{x}_i) \geq 0$, then the predicted label of $\textbf{x}$ is $1.$ We know that the function is either going to -1 or 1, since we're dealing with a binary response $Y \in \{ -1, 1\}$. Furthermore, the function is summing all $\textbf{x}_i$ closest to $\mathbf{x}$ while incorporating an exponential weight scale. Specifically, the function is looking for some $\textbf{x}_i \in$ the space of kNN (denoted $V _k(\textbf{x})$). To account for ties within the rank of k's, there is an exponential weighting scheme. Therefore, whatever the resulting label of $\hat{f}_{kNN}$ is, it will always be based on the function's best estimate.      
+NOTES FOR MYSELF:     
+$\gamma$=bandwidth, can be anything       
+The exponential weight scheme puts more weight to closer points and less weight to outside points. 
+
+
+2. Explain succinctly what $\widehat{\pi(\textbf{x})}$ is estimating in this case $$\widehat{\pi(\textbf{x})}=\sum_{i=1}^n {\bf 1} (y_i=1) \alpha_i \mathcal{K} (\textbf{x}, \textbf{x}_i)$$      
+Answer:        
+$\widehat{\pi(\textbf{x})}$ is estimating the frequency of the $\textbf{x}_i's$ (corresponding to some $y_i$) that is within the k nearest neighborhood.      
+
+3. Explain the relationship between $\hat{f}_{kNN}(\textbf{x})$ and $\hat{g}_{kNN} = 2 \text{ *indicator symbol* } (\widehat{\pi(\textbf{x})} > \frac{1}{2}) - 1$      
+Answer:                 
+$\hat{g}_{kNN}$ is just a transformation of $\hat{f}_{kNN}$
+
+  
+
+
+
+\newpage
+
+
+
+
+EXERCISE 2: Practical Machine Learning - Digit Recognition      
+
+For all random sample, set seed 19671210: set.seed(19671210)      Consider classifying '1' against '7', with '1' = positive and '7' = negative.     
+Store in memory your training set and you test set.      
+Must show the command that extracts only '1' and '7' from both the training set and test set.         
+Use the learning machines 1NN, 9NN, 18NN, and 27NN.      
+
+1. Choose $n = \text{training set size}$, $m = \text{test set size}$, write a piece of code for sampling a fragment from the large data set. Explain why you choose the number you chose.      
+
+Answer:     
+$$\mathcal{D}_{te} = 20 \% \text{ and } \mathcal{D}_{tr} = 80 \%$$ I am splitting my data this way since it is typical in stochastic hold out (splitting randomly) to give more information to the training set than the test set. This way, my training set will have more information for building the machine $\hat{f}$. And can use the remaining 20% to evaluate its predictive performance on unseen samples within the test set.     
+$$\text{If } n <<< p \Rightarrow \text{ crashes and burns}$$
+
+```{r}
+library(dslabs) # Package contributed by Yann LeCun to provide the MNIST data
+mnist <- read_mnist() # Read in the MNIST data
+
+   stratified.holdout <- function(y, ptr) 
+   {
+     n              <- length(y)
+     labels         <- unique(y)       # Obtain classifiers
+     id.tr          <- id.te <- NULL 
+     # Loop once for each unique label value
+  
+     y <- sample(sample(sample(y)))
+  
+     for(j in 1:length(labels)) 
+     {
+      sj    <- which(y==labels[j])  # Grab all rows of label type j  
+      nj    <- length(sj)           # Count of label j rows to calc proportion below
+    
+      id.tr <- c(id.tr, (sample(sample(sample(sj))))[1:round(nj*ptr)])
+  }                               # Concatenates each label type together 1 by 1
+  
+  id.te  <- (1:n) [-id.tr]          # Obtain and Shuffle test indices to randomize                                
+  
+  return(list(idx1=id.tr,idx2=id.te)) 
+} 
+ 
+```
+
+```{r}
+
+   set.seed(19671210)
+
+   library(class)
+   library(MASS)
+
+   xtrain <- mnist$train$images
+   ytrain <- mnist$train$labels
+   ytrain <- as.factor(ytrain)
+   
+   
+   hold  <- stratified.holdout(ytrain, 0.05) 
+   id.tr <- hold$idx1
+   ntr   <- length(id.tr)
+   
+   p   <- ncol(xtrain)
+
+   xtest <- mnist$test$images
+   ytest <- mnist$test$labels
+   ytest <- as.factor(ytest)
+   
+
+   hold  <- stratified.holdout(ytest, 0.05)
+   id.te <- hold$idx1
+   nte   <- length(id.te)
+   
+  
+   xtr <- xtrain[id.tr,]
+   ytr <- ytrain[id.tr]
+   xte <- xtest[id.te,]
+   yte <- ytest[id.te]
+   
+   idtr_17 <- which(ytr == 1 | ytr == 7)
+   xtr_17 <- xtr[idtr_17,]
+   ytr_17 <- ytr[idtr_17]
+   ytr_17 <- as.factor(ifelse(ytr_17 == 1,1,0))
+   
+   idte_17 <- which(yte == 1 | yte == 7)
+   xte_17 <- xte[idte_17,]
+   yte_17 <- yte[idte_17]
+   yte_17 <- as.factor(ifelse(yte_17 == 1,1,0))
+   
+   par(mfrow=c(1,2))
+   barplot(prop.table(table(ytr_17)))
+   barplot(prop.table(table(yte_17)))
+   dim(xtr_17)
+
+```
+
+
+2. Display both the training confusion matrix and the test confusion matrix for each of the 4 learning machines under consideration. \\
+Answer: \\
+
+```{r}
+#1NN Training confusion matrix
+   ytr.knn1 <- knn(xtr_17, xtr_17, ytr_17, k=1)
+
+   conf.mat.tr.knn1 <- table(ytr_17, ytr.knn1)
+   
+   print(conf.mat.tr.knn1)
+   
+   
+# 1NN Test Confusion Matrix
+   yte.knn1 <- knn(xtr_17, xte_17, ytr_17, k=1)
+
+   conf.mat.te.knn1 <- table(yte_17, yte.knn1)
+   
+   print(conf.mat.te.knn1)
+   
+  
+
+```
+
+
+```{r}
+#9NN Training confusion matrix
+   ytr.knn9 <- knn(xtr_17, xtr_17, ytr_17, k=9)
+
+   conf.mat.tr.knn9 <- table(ytr_17, ytr.knn9)
+   
+   print(conf.mat.tr.knn9)
+   
+   
+# 9NN Test Confusion Matrix
+   yte.knn9 <- knn(xtr_17, xte_17, ytr_17, k=9)
+
+   conf.mat.te.knn9 <- table(yte_17, yte.knn9)
+   
+   print(conf.mat.te.knn9)
+
+```
+
+```{r}
+#18NN Training confusion matrix
+   ytr.knn18 <- knn(xtr_17, xtr_17, ytr_17, k=18)
+
+   conf.mat.tr.knn18 <- table(ytr_17, ytr.knn18)
+   
+   print(conf.mat.tr.knn1)
+   
+   
+# 18NN Test Confusion Matrix
+   yte.knn18 <- knn(xtr_17, xte_17, ytr_17, k=18)
+
+   conf.mat.te.knn18 <- table(yte_17, yte.knn18)
+   
+   print(conf.mat.te.knn18)
+```
+
+```{r}
+#27NN Training confusion matrix
+   ytr.knn27 <- knn(xtr_17, xtr_17, ytr_17, k=27)
+
+   conf.mat.tr.knn27 <- table(ytr_17, ytr.knn27)
+   
+   print(conf.mat.tr.knn27)
+   
+   
+# 27NN Test Confusion Matrix
+   yte.knn27 <- knn(xtr_17, xte_17, ytr_17, k=27)
+
+   conf.mat.te.knn27 <- table(yte_17, yte.knn27)
+   
+   print(conf.mat.te.knn27)
+```
+
+3. Display the comparative ROC curves of the 4 learning machines, and do so for both the training set and the test set.     
+Answer:     
+
+```{r}
+#
+# Comparative ROC Curves on the training set
+# 
+  library(ROCR)
+  
+  kNN.mod <- class::knn(xtr_17, xtr_17, ytr_17, k=1, prob=TRUE)
+  prob    <- attr(kNN.mod, 'prob')
+  prob    <- 2*ifelse(kNN.mod == "0", 1-prob, prob) - 1
+  
+  pred.1NN <- prediction(prob, ytr_17)
+  perf.1NN <- performance(pred.1NN, measure='tpr', x.measure='fpr')
+  
+  kNN.mod <- class::knn(xtr_17, xtr_17, ytr_17, k=9, prob=TRUE)
+  prob    <- attr(kNN.mod, 'prob')
+  prob    <- 2*ifelse(kNN.mod == "0", 1-prob, prob) - 1
+  
+  pred.9NN <- prediction(prob, ytr_17)
+  perf.9NN <- performance(pred.9NN, measure='tpr', x.measure='fpr')
+  
+  kNN.mod <- class::knn(xtr_17, xtr_17, ytr_17, k=18, prob=TRUE)
+  prob    <- attr(kNN.mod, 'prob')
+  prob    <- 2*ifelse(kNN.mod == "0", 1-prob, prob) - 1
+  
+  pred.18NN <- prediction(prob, ytr_17)
+  perf.18NN <- performance(pred.18NN, measure='tpr', x.measure='fpr')
+  
+  kNN.mod <- class::knn(xtr_17, xtr_17, ytr_17, k=27, prob=TRUE)
+  prob    <- attr(kNN.mod, 'prob')
+  prob    <- 2*ifelse(kNN.mod == "0", 1-prob, prob) - 1
+  
+  pred.27NN <- prediction(prob, ytr_17)
+  perf.27NN <- performance(pred.27NN, measure='tpr', x.measure='fpr')
+  
+  plot(perf.1NN, col=2, lwd= 2, lty=2, main=paste('Comparative ROC curves in Training'))
+  plot(perf.9NN, col=3, lwd= 2, lty=3, add=TRUE)
+  plot(perf.18NN, col=4, lwd= 2, lty=4, add=TRUE)
+  plot(perf.27NN, col=5, lwd= 2, lty=5, add=TRUE)
+  abline(a=0,b=1)
+  legend('bottomright', inset=0.05, c('1NN','9NN', '18NN', '27NN'),  col=2:5, lty=2:5)
+```
+
+```{r}
+#
+# Comparative ROC Curves on the test set
+# 
+  library(ROCR)
+  
+  
+  kNN.mod <- class::knn(xtr_17, xte_17, ytr_17, k=1, prob=TRUE)
+  prob    <- attr(kNN.mod, 'prob')
+  prob    <- 2*ifelse(kNN.mod == "0", 1-prob, prob) - 1
+  
+  pred.1NN <- prediction(prob, yte_17)
+  perf.1NN <- performance(pred.1NN, measure='tpr', x.measure='fpr')
+  
+  kNN.mod <- class::knn(xtr_17, xte_17, ytr_17, k=9, prob=TRUE)
+  prob    <- attr(kNN.mod, 'prob')
+  prob    <- 2*ifelse(kNN.mod == "0", 1-prob, prob) - 1
+  
+  pred.9NN <- prediction(prob, yte_17)
+  perf.9NN <- performance(pred.9NN, measure='tpr', x.measure='fpr')
+  
+  kNN.mod <- class::knn(xtr_17, xte_17, ytr_17, k=18, prob=TRUE)
+  prob    <- attr(kNN.mod, 'prob')
+  prob    <- 2*ifelse(kNN.mod == "0", 1-prob, prob) - 1
+  
+  pred.18NN <- prediction(prob, yte_17)
+  perf.18NN <- performance(pred.18NN, measure='tpr', x.measure='fpr')
+  
+  kNN.mod <- class::knn(xtr_17, xte_17, ytr_17, k=27, prob=TRUE)
+  prob    <- attr(kNN.mod, 'prob')
+  prob    <- 2*ifelse(kNN.mod == "0", 1-prob, prob) - 1
+  
+  pred.27NN <- prediction(prob,yte_17)
+  perf.27NN <- performance(pred.27NN, measure='tpr', x.measure='fpr')
+  
+  plot(perf.1NN, col=2, lwd= 2, lty=2, main=paste('Comparative ROC curves in Test'))
+  plot(perf.9NN, col=3, lwd= 2, lty=3, add=TRUE)
+  plot(perf.18NN, col=4, lwd= 2, lty=4, add=TRUE)
+  plot(perf.27NN, col=5, lwd= 2, lty=5, add=TRUE)
+  abline(a=0,b=1)
+  legend('bottomright', inset=0.05, c('1NN','9NN', '18NN', '27NN'),  col=2:5, lty=2:5)
+```
+
+
+4. Identify 2 false positives and 2 false negatives at the test phase, and in each case, plot the true image against its falsely predicted counterpart.         
+Answer:    
+I investigated the 27NN test phase and found that in case 53, a 1 was classified as a 7 but the true label is a 1. And in cases 73, 74, 77, and 88, a 7 was classified as a 1 when the true label is a 7. 
+
+```{r}
+
+misclass <- which(yte_17!=yte.knn27)
+misclass
+yte_17[misclass]
+
+
+     image(1:28, 1:28, matrix(xte_17[53,], nrow=28)[ , 28:1], 
+     col = gray(seq(0, 1, 0.05)), xlab = "", ylab="")
+     
+     image(1:28, 1:28, matrix(xte_17[73,], nrow=28)[ , 28:1], 
+     col = gray(seq(0, 1, 0.05)), xlab = "", ylab="")
+     
+     image(1:28, 1:28, matrix(xte_17[74,], nrow=28)[ , 28:1], 
+     col = gray(seq(0, 1, 0.05)), xlab = "", ylab="")
+     
+     image(1:28, 1:28, matrix(xte_17[77,], nrow=28)[ , 28:1], 
+     col = gray(seq(0, 1, 0.05)), xlab = "", ylab="")
+     
+     image(1:28, 1:28, matrix(xte_17[88,], nrow=28)[ , 28:1], 
+     col = gray(seq(0, 1, 0.05)), xlab = "", ylab="")
+
+```
+
+
+
+5. Comment in greater details on any pattern that might have emerged. 
+Answer:          
+It is apparent that the machine classified sevens as ones more often than it labeled ones as sevens. This is seen above where a single one was classified as a seven, but four sevens were classified as ones. So a general pattern is that the machine misclassified sevens more than ones.  
+
+
+6. Perform principal component analysis on the data matrix and extract the first 2 components and plots them using the R Code provided.     
+```{r}
+
+   pca.tr <- prcomp(xtr_17)
+
+   summary(summary(pca.tr))
+   
+   plot((summary(pca.tr)$sdev)^2, type='h')
+   
+   pv <- cumsum((summary(pca.tr)$sdev)^2)
+
+   lambda <- (summary(pca.tr)$sdev)^2
+   pv <- cumsum(lambda/sum(lambda))
+  
+   pv
+   
+   q <- min(which(pv>0.90))
+   
+   q 
+
+   xtr.pca <- as.matrix(xtr_17)%*%pca.tr$rotation[,1:q]
+   xte.pca <- as.matrix(xte_17)%*%pca.tr$rotation[,1:q]
+     
+   x.tr.pca <- predict(pca.tr,xtr_17)[,1:q]
+   x.te.pca <- predict(pca.tr,xte_17)[,1:q]
+   
+   #yte.lda <- predict(lda(xtr,ytr),xte)$class
+   
+   yte.knn.pca <- knn(x.tr.pca, x.te.pca, ytr_17, k=27)
+   
+   conf.mat.te.knn <- prop.table(table(yte_17, yte.knn1))
+   
+   conf.mat.te.knn.pca <- prop.table(table(yte_17, yte.knn.pca))
+   
+   acc.te.knn     <- sum(diag(conf.mat.te.knn))
+   acc.te.knn.pca <- sum(diag(conf.mat.te.knn.pca))
+   
+   yte.lda.pca <- predict(lda(x.tr.pca,ytr_17),x.te.pca)$class
+   conf.mat.te.lda.pca <- prop.table(table(yte_17, yte.lda.pca))
+   acc.te.lda.pca <- sum(diag(conf.mat.te.lda.pca))
+  
+   yte.qda.pca <- predict(qda(x.tr.pca,ytr_17),x.te.pca)$class
+   conf.mat.te.qda.pca <- prop.table(table(yte_17, yte.qda.pca))
+   acc.te.qda.pca <- sum(diag(conf.mat.te.qda.pca))
+   
+   cat('27NN Test Accuracy without PCA:', acc.te.knn, 
+       '  27NN Test Accuracy with PCA: ', acc.te.knn.pca, 
+       '  LDA Test Accuracy with PCA: ', acc.te.lda.pca,
+       '  QDA Test Accuracy with PCA: ', acc.te.qda.pca,'\n')
+   
+
+
+```
+
+```{r}
+   xtr.pca27 <- as.matrix(xtr_17)%*%pca.tr$rotation[,1:2]
+   xte.pca27 <- as.matrix(xte_17)%*%pca.tr$rotation[,1:2]
+     
+   x.tr.pca27 <- predict(pca.tr,xtr_17)[,1:2]
+   x.te.pca27 <- predict(pca.tr,xte_17)[,1:2]
+   
+    plot(x.tr.pca[,1:2], col=1+as.numeric(ytr_17), main="First Two Components of Data Training Matrix")   
+    plot(x.te.pca[,1:2], col=1+as.numeric(yte_17), main="First Two Components of Data Test Matrix")   
+    
+```
+
+
+7. Compare the predictive performance of 9NN on 2 PC scores the one yielded by all the original variables. Provide a comprehensive comment.
+```{r}
+
+   pca.tr <- prcomp(xtr_17)
+
+   summary(summary(pca.tr))
+   
+   plot((summary(pca.tr)$sdev)^2, type='h')
+   
+   pv <- cumsum((summary(pca.tr)$sdev)^2)
+
+   lambda <- (summary(pca.tr)$sdev)^2
+   pv <- cumsum(lambda/sum(lambda))
+  
+   pv
+   
+   q <- min(which(pv>0.90))
+   
+   q 
+
+   xtr.pca <- as.matrix(xtr_17)%*%pca.tr$rotation[,1:q]
+   xte.pca <- as.matrix(xte_17)%*%pca.tr$rotation[,1:q]
+     
+   x.tr.pca <- predict(pca.tr,xtr_17)[,1:q]
+   x.te.pca <- predict(pca.tr,xte_17)[,1:q]
+   
+   #yte.lda <- predict(lda(xtr,ytr),xte)$class
+   
+   yte.knn.pca <- knn(x.tr.pca, x.te.pca, ytr_17, k=9)
+   
+   conf.mat.te.knn <- prop.table(table(yte_17, yte.knn1))
+   
+   conf.mat.te.knn.pca <- prop.table(table(yte_17, yte.knn.pca))
+   
+   acc.te.knn     <- sum(diag(conf.mat.te.knn))
+   acc.te.knn.pca <- sum(diag(conf.mat.te.knn.pca))
+   
+   yte.lda.pca <- predict(lda(x.tr.pca,ytr_17),x.te.pca)$class
+   conf.mat.te.lda.pca <- prop.table(table(yte_17, yte.lda.pca))
+   acc.te.lda.pca <- sum(diag(conf.mat.te.lda.pca))
+  
+   yte.qda.pca <- predict(qda(x.tr.pca,ytr_17),x.te.pca)$class
+   conf.mat.te.qda.pca <- prop.table(table(yte_17, yte.qda.pca))
+   acc.te.qda.pca <- sum(diag(conf.mat.te.qda.pca))
+   
+   cat('9NN Test Accuracy without PCA:', acc.te.knn, 
+       '  9NN Test Accuracy with PCA: ', acc.te.knn.pca, 
+       '  LDA Test Accuracy with PCA: ', acc.te.lda.pca,
+       '  QDA Test Accuracy with PCA: ', acc.te.qda.pca,'\n')
+   
+
+
+```
+Answer:     
+The 27NN Test Accuracy with PCA was 96.9% (0.96875). While the 9NN Test Accuracy with PCA was 97.7% (0.9765625). This shows a 1.1% (0.0109375) difference in PCA accuracy. This tells us that the 9NN model has a higher accuracy. However, with only the given information, I am unable to speculate if a 1.1% difference would be considered significant or not. I would be able to tell if this 1.1% would be significant if I was given more background information on the percentage representation itself (What the 1.1% gain or loss would look like outside terms of accuracy and probability). My intuition is that a 1.1% difference would be considered insignificant since it is generally a very small percentage. But, for instance, if a company were looking for a model with 0.05% or less difference between accuracy percentages, this would be considered a significant variance. 
+
+
+8. Explain with ample details why it would be ideal to consider repeating the sampling several times rather than only once.     
+Answer:    
+Repeated sampling would increase the level of significance/confidence since with the more data being investigated, that leaves less room for error. Similarly to a confidence interval, the lower the level of significance or alpha value (0.1 to 0.5 to 0.01), the tighter the confidence interval would be and the more confident I would be in my estimate. 
+
+
+
+
+
+\newpage
+
+
+
+
+
+
+EXERCISE 3: When can we compute the Bayes' Risk? \\
+
+A classifier is being built for a case study involving a bivariate predictor variable $\textbf{x}=(x_1, x_2)^\top \in \mathbb{R}^2$ and a response variable $Y \in \{ -1, 1 \}$. We are given the class conditional densities:
+$$p_X (\textbf{x}|y=-1) = \frac{1}{\sqrt{(2 \pi)^2 |\sum|}}e^{-\frac{1}{2}(\textbf{x}- \mu_{-1})^\top \sum^{-1} (\textbf{x}-\mu_{-1})}$$
+$$p_X (\textbf{x}|y=1) = \frac{1}{\sqrt{(2 \pi)^2 |\sum|}}e^{-\frac{1}{2}(\textbf{x}- \mu_{1})^\top \Sigma^{-1} (\textbf{x}-\mu_{1})}$$
+
+It is also revealed that $Pr[Y=-1] = \psi$, where $\psi \in (0,1)$. Also, $\mu_{-1}=(-2,-1)^\top, \mu_1 = (0,1)^\top$ and $$\Sigma= \begin{bmatrix} 1 & - \frac{3}{4} \\ - \frac{3}{4} & 2 \end{bmatrix}$$
+        
+
+1. Write down the expression of the decision boundary in its canonical form, that is in the raw form that uses probabilities.     
+Answer:      
+The decision boundary (DB) in its canonical form can be obtained using Bayes' Theorem:
+$$P(A|B) = \frac{P(B|A) \cdot P(A)}{P(B)}$$
+$$P(Y=1)= 1 - \psi$$
+$$P(Y=-1)= \psi$$
+$$P(x)=P(x|Y=1)P(Y=1) + P(x|Y=-1) \cdot P(Y=-1)$$
+$$P(Y=1| x) = \frac{P(x|Y=1(1 - \psi))}{P(x|Y=1)(1 - \psi) + P(x|Y=1) \cdot \psi}$$
+$$\boxed{\frac{1}{2} = \frac{P(x|Y=1)(1 - \psi)}{P(x|Y=1)(1 - \psi) + P(x|Y=1) \cdot \psi}}$$
+$$\boxed{log(p(Y=1|X=x))-log(p(Y=-1|X=x))=0}$$
+
+
+
+
+NOTES FOR MYSELF:    
+$$\{ \mathbf{x} \in \mathbb{R}^2: \delta_g(\mathbf{x})=\delta_j(\mathbf{x})=0, \forall j \neq g \}$$
+$$Pr[Y=g| \mathbf{x}]=\frac{\psi \cdot p(\mathbf{x}|y=g)}{p(\mathbf{x})}$$
+$$DB = \{ x \in \mathbb{R}^2, f(x)=\mathcal{Y} \in \{ -1, 1 \} \}$$
+
+2. Work out the expression of the decision boundary in vector form, that is with some vector $\textbf{w}$ and a scale $b$ that help define a hyperplane.  
+Answer:     
+$$\frac{1}{2}= \frac{\frac{1}{\sqrt{(2 \pi)^2 |\sum|}}e^{-\frac{1}{2}(\textbf{x}- \mu_{1})^\top \Sigma^{-1} (\textbf{x}-\mu_{1})} (1-\psi)}{\frac{1}{\sqrt{(2 \pi)^2 |\sum|}}e^{-\frac{1}{2}(\textbf{x}- \mu_{1})^\top \Sigma^{-1} (\textbf{x}-\mu_{1})}+\frac{1}{\sqrt{(2 \pi)^2 |\sum|}}e^{-\frac{1}{2}(\textbf{x}- \mu_{1})^\top \Sigma^{-1} (\textbf{x}-\mu_{1})} \psi}$$
+$$= \frac{\frac{1}{\sqrt{(2 \pi)^2 |\sum|}}e^{-\frac{1}{2}(\textbf{x}- \mu_{1})^\top \Sigma^{-1} (\textbf{x}-\mu_{1})} (1-\psi)}{(1- \psi) e^{-\frac{1}{2}\begin{bmatrix} x_1 & x_2 -1 \end{bmatrix} \cdot \begin{bmatrix} \frac{32}{23} &  \frac{12}{23} \\  \frac{12}{23} & \frac{16}{23} \end{bmatrix} \begin{bmatrix} x_1 \\ x_2 -1 \end{bmatrix}}+\psi e^{-\frac{1}{2}\begin{bmatrix} x_1+2 & x_2 +1 \end{bmatrix} \cdot \begin{bmatrix} \frac{32}{23} &  \frac{12}{23} \\  \frac{12}{23} & \frac{16}{23} \end{bmatrix} \begin{bmatrix} x_1+2 \\ x_2 +1 \end{bmatrix}}}$$
+$$= \frac{1}{1+\frac{\psi e^{- \frac{2}{23}(8x_1^2+6x_1x_2+38x_1+4x_2^2+20x_2+48)}}{(1- \psi)e^{- \frac{2}{23}(8x_1^2+6x_1x_2-6x_1+4x_2^2+4-8x_2)}}}$$
+$$\frac{1}{2}= \frac{1}{1+\frac{\psi}{1-\psi}e^{-\frac{2}{23}(44x_1+28x_2-44)}}$$
+$$2=1+\frac{\psi}{1-\psi}e^{-\frac{2}{23}(44x_1+28x_2-44)}$$
+$$1=\frac{\psi}{1-\psi}e^{-\frac{2}{23}(44x_1+28x_2-44)}$$
+$$e^{-\frac{2}{23}(44x_1+28x_2-44)} = \frac{1 -\psi}{\psi}$$
+$${-\frac{2}{23}(44x_1+28x_2-44)} = ln (\frac{1 -\psi}{\psi})$$
+$$44x_1+28x_2-44 = -\frac{2}{23} ln (\frac{1 -\psi}{\psi})$$
+$$11x_1+7x_2 = -\frac{23}{8} ln (\frac{1 -\psi}{\psi})+11$$
+$$\mathbf{w}^\top \mathbf{x}- \mathbf{b}=0$$
+$$\boxed{\begin{bmatrix} 11 & 7 \end{bmatrix} \begin{bmatrix} x_1 \\ x_2 \end{bmatrix} - \begin{bmatrix} -\frac{23}{8} ln (\frac{1 + \psi}{\psi})+11 \end{bmatrix} =0}$$
+
+
+
+3. Deduce the expression of the Bayes' classifier $f^\star$.        
+Answer:     
+$$f^\star= \text{arg}\underset{f}{\tt \min} \mathbb{E}[l(Y,f(X))]= \text{arg}\underset{f}{\tt \min} Pr[Y \neq f(X)]$$
+$$\boxed{f^\star(\mathbf{x})= \begin{cases}
+      1 & Pr[Y=1|x] > \frac{1}{2} \\
+      -1 & \text{otherwise} 
+   \end{cases}}$$
+
+
+
+4. Write down the expression of the Bayes' risk $R^\star$.    
+Answer:      
+$$\boxed{R^\star = \Phi(- \frac{\sqrt{\Delta}}{2})=\int_{- \infty}^{\frac{\sqrt{\Delta}}{2}} \frac{1}{\sqrt{2 \pi}}e^{-\frac{1}{2}z^2}dz}$$
+$$\boxed{\text{where } \Delta=(\mu_1 - \mu_2)^\top \Sigma^{-1}(\mu_1-\mu_2)}$$
+$$R^\star = \underset{f}{\tt \min} \{ Pr[f(X) \neq Y] \}$$
+
+
+
+5. With $p_{XY}(\textbf{x},y)$ denoting the joint probability distribution of $X$ and $Y$, compute the actual numerical value of $$R^\star = \min_{f} \int_{\mathbb{R}^2 \times \{-1, 1 \}} 1 (y \neq f(\textbf{x})) d P_{XY} (\mathbf{x},y)$$  $\textit{HINT: You will find some help in the lecture notes on Bayesian Gaussian Discriminant Analysis.}$       
+Answer:     
+$$\Delta = ( \begin{bmatrix} 0 \\1 \end{bmatrix} - \begin{bmatrix} -2 \\ -1 \end{bmatrix} )^\top \begin{bmatrix} \frac{32}{23} &  \frac{12}{23} \\  \frac{12}{23} & \frac{16}{23} \end{bmatrix}  ( \begin{bmatrix} 0 \\1 \end{bmatrix} - \begin{bmatrix} -2 \\ -1 \end{bmatrix} )$$
+$$\Delta=\begin{bmatrix} \frac{288}{23} \end{bmatrix} = 12.5217$$
+$$R^\star = \Phi(- \frac{\sqrt{12.5217}}{2})=\int_{- \infty}^{\frac{\sqrt{12.5217}}{2}} \frac{1}{\sqrt{2 \pi}}e^{-\frac{1}{2}z^2}dz$$
+Plugged into online calculator:
+$$=\frac{erf \frac{3 \sqrt{13913}}{25 \cdot2^{\frac{7}{2}}}+1}{2}$$
+$$=0.961578$$
+$$\Rightarrow 1-0.961578 = 0.384216$$
+$$= \boxed{3.84 \%}$$
+
+6. Generate a sample size of $n=500$ from this true model.   
+Answer:       
+```{r}
+# mvrnorm(n, mu, Sigma)
+# n is number of observations you wish to generate
+# mu is the mean vector of your normal distribution
+# Sigma is the covariance matrix of your normal distribution
+
+One <- mvrnorm(500, mu=c(-1,-2), Sigma=matrix(c(1, -0.75, -0.75, 2),2,2))
+
+Two <- mvrnorm(500, mu=c(0,1), Sigma=matrix(c(1, -0.75, -0.75, 2),2,2))
+
+X <- rbind(One, Two)
+
+Y <- c(rep(-1, 500), rep(1, 500))
+
+xy <- data.frame(X,Y)
+
+plot(X, col=2+Y, xlab=expression(X[1]), ylab=expression(X[2]))
+
+```
+
+```{r
+# Initial attempt
+# Week 2 - slide 36/69 (for LDA)
+
+n <- 500 
+psi <- 50/100
+mu1 <- c(-2,-1)
+mu2 <- c(0,1)
+rho <- -0.75
+covar1 <- matrix(c(1, rho, rho, 2), nrow=2, ncol=2)
+covar2 <- covar1
+
+n1 <- round(psi*n)
+n2 <- n - n1
+
+xy <- cbind(mvrnorm(n2, mu2, covar2), rep(0, n2))
+xy <- rbind(xy, cbind(mvrnorm(n1, mu1, covar1), rep(1, n1)))
+
+xy <- data.frame(xy)
+colnames(xy) <- c('x1', 'x2', 'x3')
+y <- xy$y
+
+
+lda.xy <- lda(y~., data=xy)
+
+mu1.hat <- lda.xy$means[1,]
+mu2.hat <- lda.xy$means[2,]
+invSig <- solve(cov(xy[,-3]))
+mup <- t(mu2.hat+mu1.hat)
+beta0 <- -0.5*mup%*%invSig%*%mum + log(n2/n1)
+beta <- invSig%*%mum
+beta1 <- beta[1]
+beta2 <- beta[2]
+x1.db <- xy[,1]
+x2.db <- -beta0/beta2 - (beta1/beta2)*x1.db
+plot(xy[,-3], col=xy$y+3, lwd=3)
+lines(x1.db, x2.db, col='red', lwd=3)
+
+```
+
+
+7. Let $S=100$. Run several splits of the data into training and test set, and for each split, compute the test errors for linear discriminant analysis, then for quadratic discriminant analysis, and then for Naive Bayes. (3 different learning machines)     
+Answer:      
+Splitting 80% of the data into training set and 20% into test set. But I had an error with some previous code, so I will be using the iris data set to demonstrate how the code should run with this data set instead. 
+```{r}
+# Set up training and test sets
+set.seed(123)
+train <- sample(1:1000, 700)
+test <- setdiff(1:1000, train)
+
+# Fit LDA, QDA, and Naive Bayes models
+fit.lda <- lda(Y[train] ~ X[train,])
+fit.qda <- qda(Y[train] ~ X[train,])
+#fit.nb <- naiveBayes(Y[train] ~ X[train,])
+
+```
+
+```{r}
+# example with iris data set
+library(MASS)
+library(e1071)
+library(naivebayes)
+
+set.seed(19671210)
+S <- 100
+n_splits <- 5
+train_size <- 0.8
+
+lda_errors <- numeric(n_splits)
+qda_errors <- numeric(n_splits)
+nb_errors <- numeric(n_splits)
+
+for (i in 1:n_splits) {
+  data_sample <- iris[sample(nrow(iris), S),]
+  
+  # split into training and test set
+  train_index <- sample(seq_len(nrow(data_sample)), size=round(train_size*S))
+  train <- data_sample[train_index,]
+  test <- data_sample[-train_index,]
+  
+  xtr <- train[, c("Sepal.Length", "Sepal.Width")]
+  xte <- test[, c("Sepal.Length", "Sepal.Width")]
+  ytr <- train[, "Species"]
+  yte <- test[,"Species"]
+  
+  # train and test LDA model
+  lda_model <- lda(xtr, ytr)
+  lda_pred <- predict(lda_model, newdata=xte)
+  lda_errors[i] <- mean(lda_pred$class != yte)
+  
+  # train and test QDA model
+  qda_model <- qda(xtr, ytr)
+  qda_pred <- predict(qda_model, newdata=xte)
+  qda_errors[i] <- mean(qda_pred$class != yte)
+  
+  # train and test naive Bayes model
+  nb_model <- naiveBayes(xtr, ytr)
+  nb_pred <- predict(nb_model, newdata=xte)
+  nb_errors[i] <- mean(nb_pred != yte)
+}
+
+mean_lda_error <- mean(lda_errors)
+mean_qda_error <- mean(qda_errors)
+mean_nb_error <- mean(nb_errors)
+
+cat("Mean LDA error:", mean_lda_error, "\n")
+cat("Mean QDA error:", mean_qda_error, "\n")
+cat("Mean naive Bayes error:", mean_nb_error, "\n")
+
+```
+
+
+8. Plot the boxplots of the test errors.   
+Answer:       
+```{r}
+# Plot boxplots of the test errors
+errors_df <- data.frame(LDA=lda_errors, QDA=qda_errors, NB=nb_errors)
+boxplot(errors_df, main="Boxplots of Test Errors", xlab="Model", ylab="Test Error")
+```
+
+```{r
+# Compute test errors for each model
+pred.lda <- predict(fit.lda, X[test,])
+err.lda <- sum(pred.lda$class != Y[test]) / length(test)
+
+pred.qda <- predict(fit.qda, X[test,])
+err.qda <- sum(pred.qda$class != Y[test]) / length(test)
+
+pred.nb <- predict(fit.nb, X[test,])
+err.nb <- sum(pred.nb$class != Y[test]) / length(test)
+
+```
+
+
+9. Plot on those boxplot the horizontal bar of the value of $R^*$ obtained earlier.    
+Answer:   
+```{r}
+errors_df <- data.frame(LDA=lda_errors, QDA=qda_errors, NB=nb_errors)
+boxplot(errors_df, main="Boxplots of Test Errors", xlab="Model", ylab="Test Error", ylim=c(0,0.4))
+
+# add horizontal line for r_star
+r_star <- 0.03842  # specified value of r_star
+abline(h = r_star, col = "red")
+```
+
+
+
+10. Comment extensively and intelligently on what transpires.   
+Answer:     
+Unfortunately, I was unable to figure out a code that worked with the provided information, I decided to try and work through the questions with the iris data set. But even then, I found $R^\star$ to be dramatically low and not touching any of the boxplots. I have spent an absurd amount of time working on this homework, going over PowerPoint lectures and video notes, but parts 6 to 9 have made it apparent that I do not understand the material as well as I thought. 
+
+
+
+
+
